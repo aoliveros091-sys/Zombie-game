@@ -1,0 +1,1080 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Zombie Attack</title>
+<style>
+* { margin:0; padding:0; box-sizing:border-box; }
+body { background:#0a0a0a; color:#e0e0e0; font-family:'Courier New',monospace; overflow:hidden; width:100vw; height:100vh; }
+canvas { display:block; }
+.screen { position:fixed; top:0; left:0; width:100%; height:100%; display:none; flex-direction:column; align-items:center; justify-content:center; }
+.screen.active { display:flex; }
+#main-menu { background:#0a0a0a; }
+#bg-canvas { position:fixed; top:0; left:0; width:100%; height:100%; z-index:0; }
+.menu-content { position:relative; z-index:10; display:flex; flex-direction:column; align-items:center; }
+.game-title { font-size:clamp(2.5rem,6vw,5rem); font-weight:900; letter-spacing:0.15em; color:#cc2200; text-transform:uppercase; font-family:'Courier New',monospace; }
+.game-subtitle { font-size:clamp(0.6rem,1.2vw,0.8rem); letter-spacing:0.5em; color:#555; text-transform:uppercase; margin-top:6px; margin-bottom:44px; }
+.menu-btn { background:transparent; border:1px solid #cc2200; color:#cc2200; font-family:'Courier New',monospace; font-size:0.85rem; letter-spacing:0.25em; text-transform:uppercase; padding:12px 0; cursor:pointer; width:240px; transition:all 0.15s; margin:4px 0; position:relative; overflow:hidden; }
+.menu-btn::before { content:''; position:absolute; left:0; top:0; height:100%; width:0; background:#cc2200; transition:width 0.15s; z-index:0; }
+.menu-btn:hover::before { width:100%; }
+.menu-btn span { position:relative; z-index:1; pointer-events:none; }
+.menu-btn:hover span { color:#0a0a0a; }
+.menu-btn.green { border-color:#22cc44; color:#22cc44; }
+.menu-btn.green::before { background:#22cc44; }
+.version-tag { position:fixed; top:42px; right:18px; font-size:0.6rem; color:#2a2a2a; letter-spacing:0.2em; z-index:20; }
+
+#announcer-box { position:fixed; top:0; left:0; width:100%; z-index:20; display:flex; align-items:center; justify-content:center; gap:18px; padding:9px 20px; background:rgba(10,10,10,0.92); border-bottom:1px solid #1a0800; pointer-events:none; }
+#announcer-prefix { display:none; }
+#announcer-text { font-size:0.72rem; color:#cc5533; letter-spacing:0.1em; transition:opacity 0.35s; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:80vw; }
+#announcer-title-label { font-size:0.72rem; color:#cc2200; letter-spacing:0.3em; text-transform:uppercase; font-weight:900; white-space:nowrap; flex-shrink:0; }
+#announcer-sep { color:#331100; font-size:0.7rem; flex-shrink:0; }
+
+#dev-toggle-btn { position:fixed; bottom:28px; right:20px; z-index:500; background:rgba(0,0,0,0.9); border:1px solid #333; color:#555; font-family:'Courier New',monospace; font-size:0.6rem; letter-spacing:0.15em; padding:6px 14px; cursor:pointer; transition:all 0.15s; }
+#dev-toggle-btn:hover, #dev-toggle-btn.active { border-color:#cc2200; color:#cc2200; }
+
+#dev-panel { position:fixed; bottom:72px; right:20px; z-index:500; width:380px; background:#0d0d0d; border:1px solid #cc2200; display:none; flex-direction:column; box-shadow:0 0 30px rgba(204,34,0,0.15); }
+#dev-panel.open { display:flex; }
+#dev-panel-header { background:rgba(204,34,0,0.08); border-bottom:1px solid rgba(204,34,0,0.25); padding:10px 14px; display:flex; align-items:center; justify-content:space-between; }
+#dev-panel-header h3 { font-size:0.65rem; letter-spacing:0.35em; color:#cc2200; text-transform:uppercase; }
+.dev-live-dot { width:6px; height:6px; background:#cc2200; border-radius:50%; animation:devpulse 1.3s infinite; }
+@keyframes devpulse { 0%,100%{opacity:1} 50%{opacity:0.15} }
+
+#dev-tabs { display:flex; border-bottom:1px solid #181818; background:#090909; }
+.dev-tab { flex:1; padding:8px 0; font-size:0.58rem; letter-spacing:0.2em; text-transform:uppercase; color:#383838; cursor:pointer; text-align:center; border:none; background:transparent; font-family:'Courier New',monospace; transition:all 0.12s; border-bottom:2px solid transparent; }
+.dev-tab:hover { color:#666; }
+.dev-tab.active { color:#cc2200; border-bottom-color:#cc2200; }
+
+.dev-tab-pane { display:none; flex-direction:column; gap:10px; padding:13px 14px; }
+.dev-tab-pane.active { display:flex; }
+
+#dev-msg-list { display:flex; flex-direction:column; gap:3px; max-height:170px; overflow-y:auto; }
+#dev-msg-list::-webkit-scrollbar { width:3px; }
+#dev-msg-list::-webkit-scrollbar-thumb { background:#cc220044; }
+.dev-msg-row { display:flex; align-items:flex-start; gap:7px; background:#111; border:1px solid #1c1c1c; padding:7px 10px; transition:border-color 0.1s; }
+.dev-msg-row.now-playing { border-color:#cc220055; background:#cc22000a; }
+.msg-dot { width:5px; height:5px; border-radius:50%; background:#252525; margin-top:5px; flex-shrink:0; }
+.dev-msg-row.now-playing .msg-dot { background:#cc2200; }
+.msg-body { flex:1; font-size:0.7rem; color:#666; line-height:1.45; word-break:break-word; }
+.dev-msg-row.now-playing .msg-body { color:#cc5533; }
+.msg-btns { display:flex; gap:3px; flex-shrink:0; }
+.msg-btn { background:none; border:1px solid #222; color:#444; cursor:pointer; font-size:0.56rem; padding:2px 7px; font-family:'Courier New',monospace; line-height:1.6; transition:all 0.1s; white-space:nowrap; }
+.msg-btn:hover { border-color:#cc2200; color:#cc2200; }
+.msg-btn.go:hover { border-color:#22cc44; color:#22cc44; }
+
+.dev-empty { font-size:0.62rem; color:#2a2a2a; text-align:center; padding:14px 0; letter-spacing:0.1em; }
+.dev-count { font-size:0.58rem; color:#333; letter-spacing:0.15em; text-align:center; }
+.dev-row-btns { display:flex; gap:6px; }
+.dev-btn { flex:1; background:transparent; border:1px solid #cc2200; color:#cc2200; font-family:'Courier New',monospace; font-size:0.6rem; letter-spacing:0.18em; padding:7px 0; cursor:pointer; text-transform:uppercase; transition:all 0.12s; }
+.dev-btn:hover { background:#cc2200; color:#000; }
+.dev-btn.dim { border-color:#282828; color:#383838; }
+.dev-btn.dim:hover { background:#1a1a1a; color:#666; border-color:#333; }
+.dev-btn.ok { border-color:#22cc44; color:#22cc44; }
+.dev-btn.ok:hover { background:#22cc44; color:#000; }
+
+.dev-label { font-size:0.56rem; letter-spacing:0.25em; color:#383838; text-transform:uppercase; }
+#dev-compose-area { width:100%; background:#0a0a0a; border:1px solid #202020; color:#cccccc; font-family:'Courier New',monospace; font-size:0.78rem; padding:9px 10px; outline:none; resize:none; height:72px; line-height:1.55; transition:border-color 0.15s; }
+#dev-compose-area:focus { border-color:#cc220077; }
+#dev-compose-area::placeholder { color:#252525; }
+.dev-hint { font-size:0.55rem; color:#292929; letter-spacing:0.1em; }
+
+.dev-ctrl-row { display:flex; align-items:center; justify-content:space-between; padding:7px 0; border-bottom:1px solid #111; }
+.dev-ctrl-label { font-size:0.62rem; color:#555; letter-spacing:0.15em; text-transform:uppercase; }
+.dev-ctrl-right { display:flex; align-items:center; gap:7px; }
+.dev-num-btn { background:none; border:1px solid #252525; color:#666; cursor:pointer; font-size:0.65rem; width:24px; height:22px; font-family:'Courier New',monospace; line-height:1; transition:all 0.1s; }
+.dev-num-btn:hover { border-color:#cc2200; color:#cc2200; }
+.dev-ctrl-val { font-size:0.72rem; color:#cc2200; min-width:36px; text-align:center; }
+.dev-mini-tog { width:36px; height:18px; background:#181818; border:1px solid #282828; cursor:pointer; position:relative; transition:background 0.15s; flex-shrink:0; }
+.dev-mini-tog.on { background:#cc2200; border-color:#aa1a00; }
+.dev-mini-tog::after { content:''; position:absolute; top:2px; left:2px; width:12px; height:12px; background:#383838; transition:left 0.15s, background 0.15s; }
+.dev-mini-tog.on::after { left:20px; background:#fff; }
+.dev-nav-row { display:flex; gap:5px; }
+.dev-nav-btn { flex:1; background:none; border:1px solid #222; color:#555; cursor:pointer; font-size:0.62rem; padding:6px 0; font-family:'Courier New',monospace; transition:all 0.1s; }
+.dev-nav-btn:hover { border-color:#cc2200; color:#cc2200; }
+.dev-stat { font-size:0.6rem; color:#333; letter-spacing:0.15em; }
+#dev-idx-display { color:#cc2200; }
+
+.panel { position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.93); z-index:100; display:none; flex-direction:column; align-items:center; justify-content:center; pointer-events:all; }
+.panel.open { display:flex; }
+.panel-box { border:1px solid #cc2200; padding:40px 48px; min-width:420px; max-width:560px; width:90%; }
+.panel-title { font-size:1.3rem; letter-spacing:0.3em; color:#cc2200; text-transform:uppercase; margin-bottom:32px; text-align:center; }
+.setting-row { display:flex; align-items:center; justify-content:space-between; margin:14px 0; gap:16px; }
+.setting-label { font-size:0.78rem; letter-spacing:0.15em; color:#aaa; text-transform:uppercase; }
+.setting-val { font-size:0.85rem; color:#cc2200; min-width:36px; text-align:right; }
+input[type=range] { -webkit-appearance:none; appearance:none; width:140px; height:3px; background:#2a2a2a; outline:none; }
+input[type=range]::-webkit-slider-thumb { -webkit-appearance:none; width:14px; height:14px; background:#cc2200; border-radius:0; cursor:pointer; }
+.toggle { width:44px; height:22px; background:#1a1a1a; border:1px solid #333; cursor:pointer; position:relative; transition:background 0.2s; flex-shrink:0; }
+.toggle.on { background:#cc2200; border-color:#cc2200; }
+.toggle::after { content:''; position:absolute; top:3px; left:3px; width:14px; height:14px; background:#555; transition:left 0.2s, background 0.2s; }
+.toggle.on::after { left:25px; background:#fff; }
+.credits-section { margin:10px 0; text-align:center; }
+.credits-role { font-size:0.62rem; letter-spacing:0.3em; color:#444; text-transform:uppercase; margin-bottom:4px; }
+.credits-name { font-size:1rem; color:#ddd; letter-spacing:0.1em; }
+.credits-divider { border:none; border-top:1px solid #151515; margin:18px 0; }
+
+#hud { position:fixed; top:0; left:0; width:100%; pointer-events:none; z-index:50; padding:16px 20px; display:none; justify-content:space-between; align-items:flex-start; }
+#hud.visible { display:flex; }
+.hud-left, .hud-right { display:flex; flex-direction:column; gap:5px; }
+.hud-stat { font-size:0.62rem; letter-spacing:0.2em; text-transform:uppercase; color:#444; }
+.hud-val { font-size:1rem; color:#ccc; }
+#health-bar-wrap { width:160px; height:4px; background:#151515; border:1px solid #252525; }
+#health-bar { height:100%; background:#22cc44; transition:width 0.15s, background 0.18s; }
+#wave-banner { position:fixed; top:50%; left:50%; transform:translate(-50%,-50%); z-index:60; pointer-events:none; opacity:0; transition:opacity 0.4s; text-align:center; }
+#wave-banner.show { opacity:1; }
+#wave-banner-text { font-size:clamp(1.5rem,4vw,2.5rem); color:#cc2200; letter-spacing:0.3em; text-transform:uppercase; }
+#wave-banner-sub { font-size:0.72rem; color:#555; letter-spacing:0.3em; margin-top:4px; }
+#gameover-screen { background:rgba(0,0,0,0.97); z-index:200; gap:12px; }
+#gameover-title { font-size:clamp(2rem,6vw,4rem); color:#cc2200; letter-spacing:0.3em; text-transform:uppercase; }
+#gameover-stats { color:#444; font-size:0.8rem; letter-spacing:0.15em; margin:16px 0; text-align:center; line-height:2.2; }
+#game-canvas { position:fixed; top:0; left:0; display:none; }
+#game-canvas.active { display:block; }
+#instructions { position:fixed; bottom:16px; left:50%; transform:translateX(-50%); font-size:0.58rem; color:#252525; letter-spacing:0.18em; text-align:center; z-index:55; pointer-events:none; display:none; }
+#instructions.visible { display:block; }
+#pause-overlay { position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.75); z-index:150; display:none; flex-direction:column; align-items:center; justify-content:center; gap:16px; pointer-events:all; }
+#pause-overlay.active { display:flex; }
+#pause-title { font-size:2rem; color:#cc2200; letter-spacing:0.4em; text-transform:uppercase; margin-bottom:8px; }
+#ammo-display { position:fixed; bottom:16px; right:20px; z-index:55; display:none; font-size:0.65rem; color:#444; letter-spacing:0.15em; pointer-events:none; text-align:right; }
+#ammo-display.visible { display:block; }
+#ammo-val { font-size:1.2rem; color:#bbb; }
+
+.char-select { display:flex; align-items:center; gap:16px; margin-bottom:28px; }
+.char-arr { background:none; border:1px solid #333; color:#555; cursor:pointer; width:30px; height:30px; font-family:'Courier New',monospace; font-size:1rem; line-height:1; transition:all 0.15s; }
+.char-arr:hover { border-color:#cc2200; color:#cc2200; }
+.char-info { display:flex; flex-direction:column; align-items:center; gap:5px; }
+#char-canvas { display:block; border:1px solid #1c1c1c; background:#0d0d0d; }
+#char-name { font-size:0.62rem; color:#cc2200; letter-spacing:0.3em; text-transform:uppercase; }
+#char-stat { font-size:0.53rem; color:#444; letter-spacing:0.12em; text-align:center; }
+
+#ann-popup-overlay { position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.82); z-index:900; display:none; align-items:center; justify-content:center; }
+#ann-popup-overlay.open { display:flex; }
+#ann-popup-card { background:#141414; border:1px solid #2a2a2a; border-radius:10px; width:min(520px,90vw); max-height:80vh; display:flex; flex-direction:column; box-shadow:0 8px 48px rgba(0,0,0,0.7); overflow:hidden; }
+#ann-popup-header { display:flex; align-items:center; justify-content:space-between; padding:16px 20px 12px; border-bottom:1px solid #222; }
+#ann-popup-headleft { display:flex; align-items:center; gap:10px; }
+#ann-popup-icon { font-size:1rem; color:#cc2200; }
+#ann-popup-title { font-size:0.95rem; font-weight:900; color:#e0e0e0; letter-spacing:0.1em; text-transform:uppercase; }
+#ann-popup-close { background:none; border:1px solid #2a2a2a; color:#555; cursor:pointer; font-family:'Courier New',monospace; font-size:0.75rem; width:28px; height:28px; border-radius:4px; display:flex; align-items:center; justify-content:center; transition:all 0.1s; }
+#ann-popup-close:hover { border-color:#cc2200; color:#cc2200; }
+#ann-popup-body { padding:16px 20px; overflow-y:auto; display:flex; flex-direction:column; gap:8px; }
+#ann-popup-body::-webkit-scrollbar { width:3px; }
+#ann-popup-body::-webkit-scrollbar-thumb { background:#cc220044; }
+.ann-popup-line { background:#1e1e1e; border-left:2px solid #cc2200; border-radius:0 6px 6px 0; padding:12px 14px; font-size:0.82rem; color:#ccc; line-height:1.6; white-space:pre-wrap; word-break:break-word; }
+</style>
+</head>
+<body>
+
+<canvas id="bg-canvas"></canvas>
+
+<div id="main-menu" class="screen active">
+  <div class="menu-content">
+    <div class="game-title">Zombie Attack</div>
+    <div class="game-subtitle">Zombie Survival</div>
+    <div class="char-select">
+      <button class="char-arr" onclick="charNav(-1)">&#60;</button>
+      <div class="char-info">
+        <canvas id="char-canvas" width="72" height="72"></canvas>
+        <div id="char-name">Soldier</div>
+        <div id="char-stat">Balanced</div>
+      </div>
+      <button class="char-arr" onclick="charNav(1)">&#62;</button>
+    </div>
+    <button class="menu-btn green" onclick="startGame()"><span>Play</span></button>
+    <button class="menu-btn" onclick="openPanel('settings-panel')"><span>Settings</span></button>
+    <button class="menu-btn" onclick="openPanel('credits-panel')"><span>Credits</span></button>
+  </div>
+  <div class="version-tag">v1.1.0 — ZOMBIE ATTACK</div>
+</div>
+
+<div id="announcer-box">
+  <div id="announcer-prefix"></div>
+  <span id="announcer-title-label">Zombie Attack</span>
+  <span id="announcer-sep">|</span>
+  <div id="announcer-text"></div>
+</div>
+
+<button id="dev-toggle-btn" onclick="toggleDevPanel()">DEV</button>
+
+<!-- Dev Announcer Panel -->
+<div id="dev-panel">
+  <div id="dev-panel-header">
+    <h3>Dev Announcer Console</h3>
+    <div class="dev-live-dot"></div>
+  </div>
+
+  <div id="dev-tabs">
+    <button class="dev-tab active" data-pane="messages" onclick="devTab(this)">Messages</button>
+    <button class="dev-tab" data-pane="compose" onclick="devTab(this)">Compose</button>
+    <button class="dev-tab" data-pane="popup" onclick="devTab(this)">Popup</button>
+    <button class="dev-tab" data-pane="controls" onclick="devTab(this)">Controls</button>
+  </div>
+
+  <!-- MESSAGES -->
+  <div class="dev-tab-pane active" id="devp-messages">
+    <div id="dev-msg-list"></div>
+    <div class="dev-count" id="dev-count">0 messages</div>
+    <div class="dev-row-btns">
+      <button class="dev-btn dim" onclick="devClearAll()">Clear All</button>
+      <button class="dev-btn" onclick="devGoTab('compose')">+ New Message</button>
+    </div>
+  </div>
+
+  <!-- COMPOSE -->
+  <div class="dev-tab-pane" id="devp-compose">
+    <div class="dev-label">Message Text</div>
+    <textarea id="dev-compose-area" placeholder="Type your announcement here...&#10;&#10;Press Add Message or hit Enter to submit."></textarea>
+    <div class="dev-hint">Enter = add &nbsp;|&nbsp; Shift+Enter = new line</div>
+    <div class="dev-row-btns">
+      <button class="dev-btn dim" onclick="devClearCompose()">Clear</button>
+      <button class="dev-btn ok" onclick="devAddMessage()">Add Message</button>
+    </div>
+  </div>
+
+  <!-- POPUP -->
+  <div class="dev-tab-pane" id="devp-popup">
+    <div class="dev-label">Popup Title (optional)</div>
+    <input id="popup-title-input" type="text" placeholder="Announcement" style="width:100%;background:#0a0a0a;border:1px solid #202020;color:#ccc;font-family:'Courier New',monospace;font-size:0.78rem;padding:7px 10px;outline:none;transition:border-color 0.15s;" onfocus="this.style.borderColor='#cc220077'" onblur="this.style.borderColor='#202020'">
+    <div class="dev-label" style="margin-top:4px;">Message</div>
+    <textarea id="popup-msg-area" placeholder="Type your full-screen announcement here..." style="width:100%;background:#0a0a0a;border:1px solid #202020;color:#cccccc;font-family:'Courier New',monospace;font-size:0.78rem;padding:9px 10px;outline:none;resize:none;height:90px;line-height:1.55;transition:border-color 0.15s;" onfocus="this.style.borderColor='#cc220077'" onblur="this.style.borderColor='#202020'"></textarea>
+    <div class="dev-hint">This pops up as a full-screen overlay players must close.</div>
+    <div class="dev-row-btns">
+      <button class="dev-btn dim" onclick="document.getElementById('popup-msg-area').value='';document.getElementById('popup-title-input').value='';">Clear</button>
+      <button class="dev-btn ok" onclick="devLaunchPopup()">Launch Popup</button>
+    </div>
+  </div>
+
+  <!-- CONTROLS -->
+  <div class="dev-tab-pane" id="devp-controls">
+    <div class="dev-ctrl-row">
+      <span class="dev-ctrl-label">Cycle Speed</span>
+      <div class="dev-ctrl-right">
+        <button class="dev-num-btn" onclick="devSpeedChange(-1)">-</button>
+        <span class="dev-ctrl-val" id="dev-speed-val">5s</span>
+        <button class="dev-num-btn" onclick="devSpeedChange(1)">+</button>
+      </div>
+    </div>
+    <div class="dev-ctrl-row">
+      <span class="dev-ctrl-label">Auto-Cycle</span>
+      <div class="dev-mini-tog on" id="dev-tog-cycle" onclick="devToggleCycle(this)"></div>
+    </div>
+    <div class="dev-ctrl-row">
+      <span class="dev-ctrl-label">Show Prefix</span>
+      <div class="dev-mini-tog on" id="dev-tog-prefix" onclick="devTogglePrefix(this)"></div>
+    </div>
+    <div class="dev-ctrl-row" style="border:none;">
+      <span class="dev-stat">Now showing</span>
+      <span class="dev-stat" id="dev-idx-display">— / —</span>
+    </div>
+    <div class="dev-nav-row">
+      <button class="dev-nav-btn" onclick="devNav(-1)">Prev</button>
+      <button class="dev-nav-btn" onclick="devNav(1)">Next</button>
+    </div>
+    <button class="dev-btn ok" style="margin-top:2px;" onclick="devShowNow()">Show Current Now</button>
+  </div>
+</div>
+
+<!-- SETTINGS -->
+<div id="settings-panel" class="panel">
+  <div class="panel-box">
+    <div class="panel-title">Settings</div>
+    <div class="setting-row">
+      <span class="setting-label">Master Volume</span>
+      <div style="display:flex;align-items:center;gap:8px;">
+        <input type="range" min="0" max="100" value="70" oninput="document.getElementById('sv-master').textContent=this.value+'%'">
+        <span class="setting-val" id="sv-master">70%</span>
+      </div>
+    </div>
+    <div class="setting-row">
+      <span class="setting-label">SFX Volume</span>
+      <div style="display:flex;align-items:center;gap:8px;">
+        <input type="range" min="0" max="100" value="80" oninput="document.getElementById('sv-sfx').textContent=this.value+'%'">
+        <span class="setting-val" id="sv-sfx">80%</span>
+      </div>
+    </div>
+    <div class="setting-row">
+      <span class="setting-label">Difficulty</span>
+      <button class="menu-btn" onclick="cycleDiff()" style="width:130px;padding:8px 0;font-size:0.7rem;"><span id="diff-label">Normal</span></button>
+    </div>
+    <div class="setting-row"><span class="setting-label">Show FPS</span><div class="toggle on" onclick="toggleOpt(this,'showFPS')"></div></div>
+    <div class="setting-row"><span class="setting-label">Screen Shake</span><div class="toggle on" onclick="toggleOpt(this,'screenShake')"></div></div>
+    <div class="setting-row"><span class="setting-label">Blood Effects</span><div class="toggle on" onclick="toggleOpt(this,'bloodFX')"></div></div>
+    <div class="setting-row"><span class="setting-label">Auto-Aim Assist</span><div class="toggle" onclick="toggleOpt(this,'aimAssist')"></div></div>
+    <div style="text-align:center;margin-top:28px;">
+      <button class="menu-btn" onclick="closePanel('settings-panel')"><span>Back</span></button>
+    </div>
+  </div>
+</div>
+
+<!-- CREDITS -->
+<div id="credits-panel" class="panel">
+  <div class="panel-box" style="text-align:center;">
+    <div class="panel-title">Credits</div>
+    <div class="credits-section"><div class="credits-role">Owner</div><div class="credits-name">Angel Oliveros (:</div></div>
+    <hr class="credits-divider">
+    <div class="credits-section"><div class="credits-role">Manager</div><div class="credits-name">King Sloth</div></div>
+    <hr class="credits-divider">
+    <div class="credits-section"><div class="credits-role">Special Thanks</div><div class="credits-name" style="font-size:0.9rem;color:#777;">Math-Gn-dev</div></div>
+    <hr class="credits-divider">
+    <div style="font-size:0.58rem;color:#1e1e1e;letter-spacing:0.15em;">Zombie Attack &copy; 2025 — All Rights Reserved</div>
+    <div style="text-align:center;margin-top:28px;">
+      <button class="menu-btn" onclick="closePanel('credits-panel')"><span>Back</span></button>
+    </div>
+  </div>
+</div>
+
+<!-- ANNOUNCEMENT POPUP OVERLAY -->
+<div id="ann-popup-overlay">
+  <div id="ann-popup-card">
+    <div id="ann-popup-header">
+      <div id="ann-popup-headleft">
+        <span id="ann-popup-icon">[!]</span>
+        <span id="ann-popup-title">Announcement</span>
+      </div>
+      <button id="ann-popup-close" onclick="closeAnnPopup()">X</button>
+    </div>
+    <div id="ann-popup-body"></div>
+  </div>
+</div>
+
+<canvas id="game-canvas"></canvas>
+<div id="hud">
+  <div class="hud-left">
+    <div class="hud-stat">Health</div>
+    <div id="health-bar-wrap"><div id="health-bar"></div></div>
+    <div class="hud-val" id="hud-hp">100</div>
+    <div class="hud-stat" style="margin-top:10px;">Score</div>
+    <div class="hud-val" id="hud-score">0</div>
+  </div>
+  <div class="hud-right" style="align-items:flex-end;">
+    <div class="hud-stat">Wave</div>
+    <div class="hud-val" id="hud-wave">1</div>
+    <div class="hud-stat" style="margin-top:10px;">Kills</div>
+    <div class="hud-val" id="hud-kills">0</div>
+    <div id="fps-el" style="font-size:0.58rem;color:#333;letter-spacing:0.15em;margin-top:10px;"></div>
+  </div>
+</div>
+<div id="ammo-display"><div style="font-size:0.58rem;color:#2a2a2a;letter-spacing:0.2em;">AMMO</div><div id="ammo-val">∞</div></div>
+<div id="wave-banner"><div id="wave-banner-text">Wave 1</div><div id="wave-banner-sub">GET READY</div></div>
+<div id="instructions">WASD — Move &nbsp;|&nbsp; Mouse — Aim &amp; Shoot (Hold) &nbsp;|&nbsp; ESC — Pause</div>
+<div id="pause-overlay">
+  <div id="pause-title">Paused</div>
+  <button class="menu-btn green" onclick="resumeGame()"><span>Resume</span></button>
+  <button class="menu-btn" onclick="quitToMenu()"><span>Main Menu</span></button>
+</div>
+<div id="gameover-screen" class="screen">
+  <div id="gameover-title">YOU DIED</div>
+  <div id="gameover-stats"></div>
+  <button class="menu-btn green" onclick="startGame()" style="pointer-events:all;"><span>Play Again</span></button>
+  <button class="menu-btn" onclick="quitToMenu()" style="pointer-events:all;"><span>Main Menu</span></button>
+</div>
+
+<script>
+// -- CHARACTERS --
+const CHARACTERS = [
+  { name:'Soldier', stat:'Balanced fighter', body:'#22cc44', stroke:'#17a02a', gun:'#cccccc', accent:'#555555', speed:235, hp:100, fireCool:0.10 },
+  { name:'Ghost',   stat:'Fast and agile',   body:'#00ccee', stroke:'#009ab8', gun:'#aaaaaa', accent:'#006688', speed:295, hp:75,  fireCool:0.08 },
+  { name:'Berserker',stat:'Tough and brutal', body:'#ee4422', stroke:'#cc2200', gun:'#888888', accent:'#ff6633', speed:180, hp:140, fireCool:0.14 },
+];
+let charIdx = 0;
+
+function charNav(d) {
+  charIdx = ((charIdx + d) % CHARACTERS.length + CHARACTERS.length) % CHARACTERS.length;
+  drawCharPreview();
+}
+
+function drawCharPreview() {
+  const ch = CHARACTERS[charIdx];
+  const cv = document.getElementById('char-canvas');
+  if (!cv) return;
+  const cx = cv.getContext('2d');
+  const cw = cv.width, chh = cv.height, cx2 = cw/2, cy2 = chh/2;
+  cx.clearRect(0,0,cw,chh);
+  cx.fillStyle = '#0d0d0d'; cx.fillRect(0,0,cw,chh);
+  cx.shadowColor = ch.body; cx.shadowBlur = 14;
+  cx.fillStyle = ch.body; cx.beginPath(); cx.arc(cx2, cy2, 16, 0, Math.PI*2); cx.fill();
+  cx.strokeStyle = ch.stroke; cx.lineWidth = 2; cx.beginPath(); cx.arc(cx2, cy2, 16, 0, Math.PI*2); cx.stroke();
+  cx.shadowBlur = 0;
+  cx.fillStyle = ch.gun; cx.fillRect(cx2+10, cy2-5, 18, 7);
+  cx.fillStyle = ch.accent; cx.fillRect(cx2+10, cy2-5, 8, 4);
+  cx.fillStyle = '#fff'; cx.beginPath(); cx.arc(cx2+5, cy2-4, 3, 0, Math.PI*2); cx.fill();
+  cx.fillStyle = '#ff2200'; cx.beginPath(); cx.arc(cx2+5, cy2-4, 1.5, 0, Math.PI*2); cx.fill();
+  document.getElementById('char-name').textContent = ch.name;
+  document.getElementById('char-stat').textContent = ch.stat;
+}
+
+// -- SETTINGS --
+const settings = { showFPS:true, screenShake:true, bloodFX:true, aimAssist:false };
+const DIFFS = ['Easy','Normal','Hard','Nightmare'];
+let diffIdx = 1;
+function getDiffMult() { return [0.55,1,1.55,2.6][diffIdx]; }
+function cycleDiff() { diffIdx=(diffIdx+1)%DIFFS.length; document.getElementById('diff-label').textContent=DIFFS[diffIdx]; }
+function toggleOpt(el,k){ el.classList.toggle('on'); settings[k]=el.classList.contains('on'); }
+function openPanel(id){ document.getElementById(id).classList.add('open'); }
+function closePanel(id){ document.getElementById(id).classList.remove('open'); }
+
+// -- ANNOUNCER --
+const DEFAULT_MSGS = [
+  "The F students are inventors!",
+  "The A students aren't inventors.",
+  "(760)683-4273 Goguardian Ceo home number.",
+  "(202)342-6085 Securlys ceo home number",
+  "Say It with me ochoa and klein No more blocking its pointless.",
+  "STOP THE TAB LIMIT NOW.",
+  "L amplify spammer.",
+  "The Computer free day is pointless.",
+  "Science = yapping",
+  "Science = pointless + boredom",
+];
+function loadMsgs() {
+  try {
+    const saved = localStorage.getItem('za_msgs');
+    if (saved) { const p = JSON.parse(saved); if (Array.isArray(p) && p.length) return p; }
+  } catch(e) {}
+  return [...DEFAULT_MSGS];
+}
+function saveMsgs() {
+  try { localStorage.setItem('za_msgs', JSON.stringify(msgs)); } catch(e) {}
+}
+let msgs = loadMsgs();
+let annIdx = 0, annSpeed = 5, annAuto = true, annPrefix = true;
+let annTimer = null;
+
+function setAnnText(txt) {
+  const el = document.getElementById('announcer-text');
+  el.style.opacity = '0';
+  setTimeout(() => { el.textContent = txt; el.style.opacity = '1'; }, 300);
+}
+function showMsg(i) {
+  if (!msgs.length) return;
+  annIdx = ((i % msgs.length) + msgs.length) % msgs.length;
+  setAnnText(msgs[annIdx]);
+  updateDevIdx();
+  renderMsgList();
+}
+function startAnnCycle() {
+  if (annTimer) clearInterval(annTimer);
+  if (!annAuto || !msgs.length) return;
+  annTimer = setInterval(() => showMsg(annIdx + 1), annSpeed * 1000);
+}
+function updateDevIdx() {
+  const el = document.getElementById('dev-idx-display');
+  if (el) el.textContent = msgs.length ? (annIdx+1)+' / '+msgs.length : '— / —';
+}
+
+document.getElementById('announcer-text').style.transition = 'opacity 0.3s';
+showMsg(0); startAnnCycle();
+
+// -- DEV PANEL --
+let devOpen = false;
+let devUnlocked = false;
+const DEV_PASS = 'Eey32U6umNN';
+
+function toggleDevPanel() {
+  if (!devUnlocked) {
+    const input = prompt('DEV panel password:');
+    if (input === null) return;
+    if (input !== DEV_PASS) { alert('Wrong password.'); return; }
+    devUnlocked = true;
+  }
+  devOpen = !devOpen;
+  document.getElementById('dev-panel').classList.toggle('open', devOpen);
+  document.getElementById('dev-toggle-btn').classList.toggle('active', devOpen);
+  if (devOpen) { renderMsgList(); updateDevIdx(); }
+}
+
+function devTab(btn) {
+  const pane = btn.dataset.pane;
+  document.querySelectorAll('.dev-tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.dev-tab-pane').forEach(p => p.classList.remove('active'));
+  btn.classList.add('active');
+  document.getElementById('devp-' + pane).classList.add('active');
+  if (pane === 'messages') renderMsgList();
+  if (pane === 'compose') setTimeout(() => document.getElementById('dev-compose-area').focus(), 50);
+}
+
+function devGoTab(name) {
+  const btn = document.querySelector('.dev-tab[data-pane="'+name+'"]');
+  if (btn) devTab(btn);
+}
+
+function renderMsgList() {
+  const list = document.getElementById('dev-msg-list');
+  const countEl = document.getElementById('dev-count');
+  list.innerHTML = '';
+  if (!msgs.length) {
+    list.innerHTML = '<div class="dev-empty">No messages yet — go to Compose</div>';
+  } else {
+    msgs.forEach((m, i) => {
+      const row = document.createElement('div');
+      row.className = 'dev-msg-row' + (i === annIdx ? ' now-playing' : '');
+      row.innerHTML =
+        '<div class="msg-dot"></div>' +
+        '<div class="msg-body">' + escH(m) + '</div>' +
+        '<div class="msg-btns">' +
+          '<button class="msg-btn go" title="Show now" onclick="devPlayMsg('+i+')">Play</button>' +
+          '<button class="msg-btn" title="Delete" onclick="devDeleteMsg('+i+')">Del</button>' +
+        '</div>';
+      list.appendChild(row);
+    });
+  }
+  countEl.textContent = msgs.length + (msgs.length === 1 ? ' message' : ' messages');
+  updateDevIdx();
+}
+
+function escH(s) { return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+function devAddMessage() {
+  const ta = document.getElementById('dev-compose-area');
+  const v = ta.value.trim();
+  if (!v) { ta.focus(); return; }
+  msgs.push(v);
+  saveMsgs();
+  ta.value = '';
+  renderMsgList();
+  startAnnCycle();
+  devGoTab('messages');
+}
+
+function devClearCompose() {
+  const ta = document.getElementById('dev-compose-area');
+  ta.value = '';
+  ta.focus();
+}
+
+function devDeleteMsg(i) {
+  msgs.splice(i, 1);
+  saveMsgs();
+  if (annIdx >= msgs.length) annIdx = Math.max(0, msgs.length - 1);
+  if (msgs.length) showMsg(annIdx); else setAnnText('');
+  renderMsgList();
+  startAnnCycle();
+}
+
+function devClearAll() {
+  if (!msgs.length) return;
+  if (!confirm('Delete all ' + msgs.length + ' message(s)?')) return;
+  msgs = []; annIdx = 0;
+  saveMsgs();
+  setAnnText('');
+  renderMsgList();
+  if (annTimer) clearInterval(annTimer);
+}
+
+// -- POPUP ANNOUNCEMENT --
+function devLaunchPopup() {
+  const titleEl = document.getElementById('popup-title-input');
+  const msgEl = document.getElementById('popup-msg-area');
+  const title = titleEl.value.trim() || 'Announcement';
+  const msg = msgEl.value.trim();
+  if (!msg) { msgEl.focus(); return; }
+  fetch('/api/popup/broadcast', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ title, message: msg })
+  }).then(r => r.json()).then(d => {
+    const btn = document.querySelector('#devp-popup .dev-btn.ok');
+    if (btn) { const orig = btn.textContent; btn.textContent = 'Sent to ' + d.recipients + ' player(s)'; setTimeout(() => btn.textContent = orig, 2500); }
+  }).catch(() => showAnnPopup(title, msg));
+}
+
+function showAnnPopup(title, msg) {
+  document.getElementById('ann-popup-title').textContent = title;
+  const body = document.getElementById('ann-popup-body');
+  body.innerHTML = '';
+  msg.split('\n').filter(l => l.trim()).forEach(line => {
+    const div = document.createElement('div');
+    div.className = 'ann-popup-line';
+    div.textContent = line;
+    body.appendChild(div);
+  });
+  document.getElementById('ann-popup-overlay').classList.add('open');
+}
+
+function closeAnnPopup() {
+  document.getElementById('ann-popup-overlay').classList.remove('open');
+}
+
+document.getElementById('ann-popup-overlay').addEventListener('click', function(e) {
+  if (e.target === this) closeAnnPopup();
+});
+
+// -- LIVE SSE CONNECTION --
+function connectSSE() {
+  const es = new EventSource('/api/popup/events');
+  es.onmessage = function(e) {
+    try {
+      const data = JSON.parse(e.data);
+      if (data.type === 'popup') showAnnPopup(data.title, data.message);
+    } catch {}
+  };
+  es.onerror = function() {
+    es.close();
+    setTimeout(connectSSE, 5000);
+  };
+}
+connectSSE();
+
+// -- VERSION 1.1 STARTUP POPUP --
+window.addEventListener('load', function() {
+  drawCharPreview();
+  setTimeout(function() {
+    showAnnPopup('v1.1 Update', 'New features: smoother gameplay, better graphics, zombie eyes, boss spikes, muzzle flash, and 3 new playable characters!');
+  }, 800);
+});
+
+function devPlayMsg(i) { showMsg(i); startAnnCycle(); }
+function devNav(dir) { if (!msgs.length) return; showMsg(annIdx + dir); startAnnCycle(); }
+function devShowNow() { if (msgs.length) showMsg(annIdx); }
+
+function devSpeedChange(d) {
+  annSpeed = Math.max(1, Math.min(60, annSpeed + d));
+  document.getElementById('dev-speed-val').textContent = annSpeed + 's';
+  startAnnCycle();
+}
+
+function devToggleCycle(el) {
+  el.classList.toggle('on');
+  annAuto = el.classList.contains('on');
+  startAnnCycle();
+}
+
+function devTogglePrefix(el) {
+  el.classList.toggle('on');
+  annPrefix = el.classList.contains('on');
+  document.getElementById('announcer-prefix').style.display = annPrefix ? 'block' : 'none';
+}
+
+// -- KEY FIX: stop all keystrokes inside dev panel --
+const devPanelEl = document.getElementById('dev-panel');
+devPanelEl.addEventListener('keydown', e => e.stopPropagation(), true);
+devPanelEl.addEventListener('keyup',   e => e.stopPropagation(), true);
+devPanelEl.addEventListener('keypress',e => e.stopPropagation(), true);
+
+// Compose textarea: Enter = add, Shift+Enter = newline
+document.getElementById('dev-compose-area').addEventListener('keydown', function(e) {
+  e.stopPropagation();
+  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); devAddMessage(); }
+});
+
+// -- MENU BG --
+const bgC = document.getElementById('bg-canvas');
+const bgX = bgC.getContext('2d');
+let bgW = 0, bgH = 0;
+const bgPts = [];
+(function initBg() {
+  for (let i=0;i<70;i++) bgPts.push({x:Math.random()*2000,y:Math.random()*1200,vx:(Math.random()-.5)*.25,vy:Math.random()*.35+.1,r:Math.random()*1.8+.4,a:Math.random()*.38+.05,red:Math.random()<.28});
+})();
+function resizeBg() { bgW=bgC.width=innerWidth; bgH=bgC.height=innerHeight; }
+resizeBg(); addEventListener('resize', resizeBg);
+function drawBg(ts) {
+  const t = ts*.001;
+  bgX.fillStyle='#0a0a0a'; bgX.fillRect(0,0,bgW,bgH);
+  const go=(t*8)%60;
+  bgX.strokeStyle='rgba(204,34,0,0.04)'; bgX.lineWidth=0.5;
+  for(let x=-go;x<bgW+60;x+=60){bgX.beginPath();bgX.moveTo(x,0);bgX.lineTo(x,bgH);bgX.stroke();}
+  for(let y=-go;y<bgH+60;y+=60){bgX.beginPath();bgX.moveTo(0,y);bgX.lineTo(bgW,y);bgX.stroke();}
+  bgPts.forEach(p=>{
+    p.x+=p.vx;p.y+=p.vy;
+    if(p.y>bgH+8){p.y=-8;p.x=Math.random()*bgW;}
+    if(p.x<-5)p.x=bgW+5; if(p.x>bgW+5)p.x=-5;
+    bgX.beginPath();bgX.arc(p.x,p.y,p.r,0,Math.PI*2);
+    bgX.fillStyle=p.red?`rgba(204,34,0,${p.a})`:`rgba(60,60,60,${p.a})`;bgX.fill();
+  });
+  const g=bgX.createRadialGradient(bgW/2,bgH/2,bgH*.15,bgW/2,bgH/2,bgH*.88);
+  g.addColorStop(0,'transparent');g.addColorStop(1,'rgba(0,0,0,.75)');
+  bgX.fillStyle=g;bgX.fillRect(0,0,bgW,bgH);
+  requestAnimationFrame(drawBg);
+}
+requestAnimationFrame(drawBg);
+
+// -- GAME ENGINE --
+const gc = document.getElementById('game-canvas');
+const ctx = gc.getContext('2d');
+let GW=0,GH=0;
+function resizeGame(){GW=gc.width=innerWidth;GH=gc.height=innerHeight;}
+resizeGame(); addEventListener('resize',resizeGame);
+
+let gameState='menu', lastTime=0, fpsAcc=0, fpsCnt=0, fpsVal=0;
+let player,bullets,zombies,particles,powerups,mapDecor;
+let score,kills,wave,waveActive,spawnCnt,spawnTimer;
+let shX=0,shY=0,shT=0;
+let keys={}, mouse={x:0,y:0,down:false};
+
+function genDecor(){
+  mapDecor=[];
+  for(let i=0;i<16;i++) mapDecor.push({type:'blood',x:Math.random()*GW,y:Math.random()*GH,rx:Math.random()*30+8,ry:Math.random()*14+4,rot:Math.random()*Math.PI,a:Math.random()*.12+.03});
+  for(let i=0;i<9;i++) mapDecor.push({type:'box',x:45+Math.random()*(GW-90),y:45+Math.random()*(GH-90),w:Math.random()*28+14,h:Math.random()*28+14,rot:Math.random()*Math.PI});
+  for(let i=0;i<7;i++) mapDecor.push({type:'crack',x:Math.random()*GW,y:Math.random()*GH,len:Math.random()*55+18,ang:Math.random()*Math.PI});
+}
+
+function initGame(){
+  genDecor();
+  const ch=CHARACTERS[charIdx];
+  player={x:GW/2,y:GH/2,w:20,hp:ch.hp,maxHp:ch.hp,speed:ch.speed,fireRate:0,fireCool:ch.fireCool,invincible:0,facing:0};
+  bullets=[];zombies=[];particles=[];powerups=[];
+  score=0;kills=0;wave=0;waveActive=false;spawnCnt=0;spawnTimer=0;
+  updateHUD();startWave();
+}
+
+function startWave(){
+  wave++;
+  document.getElementById('hud-wave').textContent=wave;
+  const boss=wave%5===0;
+  showBanner('Wave '+wave, boss?'BOSS WAVE':wave===1?'SURVIVE':'GET READY');
+  waveActive=true;
+  spawnCnt=Math.floor((5+wave*4.5)*getDiffMult());
+  spawnTimer=0;
+}
+
+function showBanner(t,s){
+  const b=document.getElementById('wave-banner');
+  document.getElementById('wave-banner-text').textContent=t;
+  document.getElementById('wave-banner-sub').textContent=s;
+  b.classList.add('show');
+  setTimeout(()=>b.classList.remove('show'),2400);
+}
+
+function spawnZombie(){
+  const edge=Math.floor(Math.random()*4);
+  let x,y;
+  if(edge===0){x=Math.random()*GW;y=-32;}
+  else if(edge===1){x=GW+32;y=Math.random()*GH;}
+  else if(edge===2){x=Math.random()*GW;y=GH+32;}
+  else{x=-32;y=Math.random()*GH;}
+  const boss=wave%5===0&&spawnCnt<=1;
+  const r=Math.random(),tc=Math.min(1,wave/9);
+  let tier=0;
+  if(boss)tier=3;
+  else if(r<.12*tc)tier=2;
+  else if(r<.35*tc)tier=1;
+  const T=[
+    {c:'#5a9e33',hp:28,spd:82,sz:14,dmg:20,pts:10},
+    {c:'#996633',hp:62,spd:118,sz:17,dmg:36,pts:25},
+    {c:'#993366',hp:135,spd:70,sz:21,dmg:58,pts:50},
+    {c:'#cc2200',hp:520,spd:50,sz:36,dmg:90,pts:200,boss:true},
+  ][tier];
+  const dm=getDiffMult();
+  zombies.push({x,y,hp:T.hp*dm,maxHp:T.hp*dm,spd:T.spd*(0.88+Math.random()*.24)*dm,sz:T.sz,c:T.c,dmg:T.dmg,pts:T.pts,boss:!!T.boss,flash:0,stagger:0,wob:Math.random()*Math.PI*2});
+}
+
+function ptcl(x,y,color,n,spd){
+  if(!settings.bloodFX)return;
+  for(let i=0;i<n;i++){const a=Math.random()*Math.PI*2,s=spd*(.4+Math.random()*.8);particles.push({x,y,vx:Math.cos(a)*s,vy:Math.sin(a)*s,life:1,color,sz:Math.random()*3+1});}
+}
+
+function shake(a){if(!settings.screenShake)return;shT=.14;shX=(Math.random()-.5)*a;shY=(Math.random()-.5)*a;}
+
+function startGame(){
+  document.getElementById('main-menu').classList.remove('active');
+  document.getElementById('gameover-screen').classList.remove('active');
+  document.getElementById('announcer-box').style.display='none';
+  document.getElementById('dev-toggle-btn').style.display='none';
+  if(devOpen)toggleDevPanel();
+  bgC.style.display='none';
+  gc.classList.add('active');
+  document.getElementById('hud').classList.add('visible');
+  document.getElementById('ammo-display').classList.add('visible');
+  document.getElementById('instructions').classList.add('visible');
+  setTimeout(()=>document.getElementById('instructions').classList.remove('visible'),5000);
+  gameState='playing'; lastTime=performance.now();
+  initGame();
+  requestAnimationFrame(loop);
+}
+
+function resumeGame(){
+  gameState='playing';
+  document.getElementById('pause-overlay').classList.remove('active');
+  lastTime=performance.now();
+  requestAnimationFrame(loop);
+}
+
+function quitToMenu(){
+  gameState='menu';
+  gc.classList.remove('active');
+  document.getElementById('hud').classList.remove('visible');
+  document.getElementById('ammo-display').classList.remove('visible');
+  document.getElementById('pause-overlay').classList.remove('active');
+  document.getElementById('gameover-screen').classList.remove('active');
+  document.getElementById('main-menu').classList.add('active');
+  document.getElementById('announcer-box').style.display='flex';
+  document.getElementById('dev-toggle-btn').style.display='block';
+  bgC.style.display='block';
+  showMsg(annIdx); startAnnCycle();
+}
+
+function gameOver(){
+  gameState='gameover';
+  gc.classList.remove('active');
+  document.getElementById('hud').classList.remove('visible');
+  document.getElementById('ammo-display').classList.remove('visible');
+  document.getElementById('gameover-stats').innerHTML=`Score: ${score.toLocaleString()}<br>Kills: ${kills}<br>Wave: ${wave}<br>Difficulty: ${DIFFS[diffIdx]}`;
+  document.getElementById('gameover-screen').classList.add('active');
+}
+
+function updateHUD(){
+  const hp=Math.max(0,player.hp);
+  document.getElementById('hud-hp').textContent=Math.ceil(hp);
+  document.getElementById('health-bar').style.width=(hp/player.maxHp*100)+'%';
+  document.getElementById('health-bar').style.background=hp<30?'#cc2200':hp<60?'#aaaa22':'#22cc44';
+  document.getElementById('hud-score').textContent=score.toLocaleString();
+  document.getElementById('hud-kills').textContent=kills;
+}
+
+function loop(ts){
+  if(gameState!=='playing')return;
+  const dt=Math.min((ts-lastTime)/1000,.028); lastTime=ts;
+  fpsAcc+=dt;fpsCnt++;
+  if(fpsAcc>=.6){fpsVal=Math.round(fpsCnt/fpsAcc);fpsAcc=0;fpsCnt=0;}
+  document.getElementById('fps-el').textContent=settings.showFPS?fpsVal+' FPS':'';
+  update(dt,ts);render(ts);
+  requestAnimationFrame(loop);
+}
+
+function update(dt,ts){
+  if(shT>0){shT-=dt;if(shT<=0){shX=0;shY=0;}}
+
+  // Player
+  let dx=0,dy=0;
+  if(keys['ArrowLeft']||keys['a']||keys['A'])dx-=1;
+  if(keys['ArrowRight']||keys['d']||keys['D'])dx+=1;
+  if(keys['ArrowUp']||keys['w']||keys['W'])dy-=1;
+  if(keys['ArrowDown']||keys['s']||keys['S'])dy+=1;
+  if(dx&&dy){dx*=.7071;dy*=.7071;}
+  player.x=Math.max(player.w,Math.min(GW-player.w,player.x+dx*player.speed*dt));
+  player.y=Math.max(player.w,Math.min(GH-player.w,player.y+dy*player.speed*dt));
+  player.facing=Math.atan2(mouse.y-player.y,mouse.x-player.x);
+  if(player.invincible>0)player.invincible-=dt;
+
+  // Fire — no reload, infinite ammo
+  player.fireRate-=dt;
+  if(mouse.down&&player.fireRate<=0){fire();player.fireRate=player.fireCool;}
+
+  // Bullets
+  bullets=bullets.filter(b=>{
+    b.x+=b.vx*dt;b.y+=b.vy*dt;b.life-=dt;
+    if(b.trail){b.trail.push({x:b.x,y:b.y});if(b.trail.length>5)b.trail.shift();}
+    if(b.life<=0||b.x<-20||b.x>GW+20||b.y<-20||b.y>GH+20)return false;
+    for(let i=zombies.length-1;i>=0;i--){
+      const z=zombies[i];
+      if(Math.hypot(b.x-z.x,b.y-z.y)<z.sz+4){
+        z.hp-=b.dmg;z.flash=0.1;z.stagger=0.06;
+        ptcl(b.x,b.y,'#ff3300',3,52);
+        if(z.hp<=0){score+=z.pts;kills++;ptcl(z.x,z.y,z.boss?'#cc0000':'#662200',z.boss?16:7,z.boss?95:68);mapDecor.push({type:'blood',x:z.x,y:z.y,rx:z.sz*1.9+Math.random()*10,ry:z.sz*.65+Math.random()*5,rot:Math.random()*Math.PI,a:0.22+Math.random()*0.1});spawnPUp(z.x,z.y);zombies.splice(i,1);updateHUD();}
+        return false;
+      }
+    }
+    return true;
+  });
+
+  // Zombies
+  const t=ts*.001;
+  zombies.forEach(z=>{
+    if(z.flash>0)z.flash-=dt;
+    if(z.stagger>0){z.stagger-=dt;return;}
+    const ang=Math.atan2(player.y-z.y,player.x-z.x)+Math.sin(t*2.3+z.wob)*.07;
+    z.x+=Math.cos(ang)*z.spd*dt; z.y+=Math.sin(ang)*z.spd*dt;
+    zombies.forEach(z2=>{
+      if(z===z2)return;
+      const ddx=z.x-z2.x,ddy=z.y-z2.y,d=Math.hypot(ddx,ddy),mn=(z.sz+z2.sz)*1.15;
+      if(d<mn&&d>.1){z.x+=ddx/d*(mn-d)*.32;z.y+=ddy/d*(mn-d)*.32;}
+    });
+    if(Math.hypot(player.x-z.x,player.y-z.y)<player.w+z.sz-4&&player.invincible<=0){
+      player.hp-=z.dmg*dt*3;player.invincible=.5;shake(z.boss?14:7);
+      if(player.hp<=0){player.hp=0;updateHUD();gameOver();}
+      updateHUD();
+    }
+  });
+
+  // Powerups
+  powerups=powerups.filter(p=>{
+    p.life-=dt;p.pulse+=dt*3.5;
+    if(p.life<=0)return false;
+    if(Math.hypot(player.x-p.x,player.y-p.y)<player.w+14){
+      if(p.type==='health')player.hp=Math.min(player.maxHp,player.hp+35);
+      else{player.speed=370;setTimeout(()=>{if(player)player.speed=235;},5000);}
+      shake(3);ptcl(p.x,p.y,p.type==='health'?'#22cc44':'#ffcc00',8,52);updateHUD();return false;
+    }
+    return true;
+  });
+
+  particles=particles.filter(p=>{
+    p.x+=p.vx*dt;p.y+=p.vy*dt;p.vx*=(1-4*dt);p.vy*=(1-4*dt);p.life-=dt*1.4;return p.life>0;
+  });
+
+  if(waveActive){
+    if(spawnCnt>0){
+      spawnTimer-=dt;
+      const rate=Math.max(.22,1.55-wave*.07);
+      if(spawnTimer<=0){spawnZombie();spawnCnt--;spawnTimer=rate;}
+    }else if(zombies.length===0){
+      waveActive=false;score+=wave*120;updateHUD();setTimeout(startWave,2600);
+    }
+  }
+}
+
+function spawnPUp(x,y){
+  if(Math.random()>.22)return;
+  powerups.push({x,y,type:Math.random()<.6?'health':'speed',life:9,pulse:0});
+}
+
+function fire(){
+  let ang=player.facing;
+  if(settings.aimAssist&&zombies.length){
+    let best=Infinity,bz=null;
+    zombies.forEach(z=>{const d=Math.hypot(z.x-player.x,z.y-player.y);if(d<best&&d<290){best=d;bz=z;}});
+    if(bz){const za=Math.atan2(bz.y-player.y,bz.x-player.x);let df=za-ang;while(df>Math.PI)df-=Math.PI*2;while(df<-Math.PI)df+=Math.PI*2;if(Math.abs(df)<.45)ang+=df*.55;}
+  }
+  const sp=(Math.random()-.5)*.03;
+  bullets.push({x:player.x+Math.cos(ang)*18,y:player.y+Math.sin(ang)*18,vx:Math.cos(ang+sp)*730,vy:Math.sin(ang+sp)*730,life:1.1,dmg:28,trail:[]});
+  shake(1.5);ptcl(player.x+Math.cos(ang)*20,player.y+Math.sin(ang)*20,'#ffaa00',2,85);
+}
+
+function render(ts){
+  const gt=ts*.001;
+  ctx.save();ctx.translate(shX,shY);
+  ctx.fillStyle='#0c0c0c';ctx.fillRect(-40,-40,GW+80,GH+80);
+
+  // Floor tiles
+  ctx.strokeStyle='rgba(255,255,255,0.017)';ctx.lineWidth=.5;
+  const TS=80;
+  for(let x=0;x<GW+TS;x+=TS){ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,GH);ctx.stroke();}
+  for(let y=0;y<GH+TS;y+=TS){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(GW,y);ctx.stroke();}
+  ctx.strokeStyle='rgba(204,34,0,0.022)';
+  for(let x=0;x<GW+TS;x+=TS/2){ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,GH);ctx.stroke();}
+  for(let y=0;y<GH+TS;y+=TS/2){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(GW,y);ctx.stroke();}
+
+  // Decor
+  mapDecor.forEach(d=>{
+    ctx.save();
+    if(d.type==='blood'){ctx.globalAlpha=d.a;ctx.fillStyle='#770000';ctx.beginPath();ctx.ellipse(d.x,d.y,d.rx,d.ry,d.rot,0,Math.PI*2);ctx.fill();}
+    else if(d.type==='box'){ctx.globalAlpha=.3;ctx.translate(d.x,d.y);ctx.rotate(d.rot);ctx.strokeStyle='#252525';ctx.lineWidth=1;ctx.strokeRect(-d.w/2,-d.h/2,d.w,d.h);ctx.beginPath();ctx.moveTo(-d.w/2,-d.h/2);ctx.lineTo(d.w/2,d.h/2);ctx.stroke();}
+    else if(d.type==='crack'){ctx.globalAlpha=.1;ctx.strokeStyle='#888';ctx.lineWidth=.5;ctx.beginPath();ctx.moveTo(d.x,d.y);ctx.lineTo(d.x+Math.cos(d.ang)*d.len,d.y+Math.sin(d.ang)*d.len);ctx.stroke();}
+    ctx.restore();
+  });
+
+  // Powerups
+  powerups.forEach(p=>{
+    const r=12+Math.sin(p.pulse)*2.5;
+    const cols={health:'#22cc44',speed:'#ffcc00'};
+    const lbs={health:'+',speed:'+'};
+    ctx.save();ctx.globalAlpha=.88;
+    ctx.strokeStyle=cols[p.type];ctx.lineWidth=1.5;
+    ctx.beginPath();ctx.arc(p.x,p.y,r,0,Math.PI*2);ctx.stroke();
+    ctx.fillStyle=cols[p.type]+'22';ctx.fill();
+    ctx.fillStyle=cols[p.type];ctx.font='bold 14px Courier New';ctx.textAlign='center';ctx.textBaseline='middle';
+    ctx.fillText(lbs[p.type],p.x,p.y);
+    ctx.restore();
+  });
+
+  // Particles
+  particles.forEach(p=>{
+    ctx.globalAlpha=Math.max(0,p.life*.8);
+    ctx.fillStyle=p.color;ctx.beginPath();ctx.arc(p.x,p.y,p.sz*Math.max(.1,p.life),0,Math.PI*2);ctx.fill();
+  });ctx.globalAlpha=1;
+
+  // Zombies
+  zombies.forEach(z=>{
+    ctx.save();ctx.globalAlpha=.22;ctx.fillStyle='#000';
+    ctx.beginPath();ctx.ellipse(z.x+2,z.y+z.sz*.72,z.sz*.68,z.sz*.22,0,0,Math.PI*2);ctx.fill();ctx.restore();
+    // Glow on boss
+    if(z.boss){ctx.save();ctx.shadowColor='#ff2200';ctx.shadowBlur=18;}
+    ctx.fillStyle=z.flash>0?'#fff':z.c;ctx.beginPath();ctx.arc(z.x,z.y,z.sz,0,Math.PI*2);ctx.fill();
+    if(z.boss){ctx.restore();ctx.strokeStyle='#ff1100';ctx.lineWidth=2.5;ctx.beginPath();ctx.arc(z.x,z.y,z.sz+3,0,Math.PI*2);ctx.stroke();
+      // Boss spikes
+      for(let s=0;s<8;s++){const sa=s/8*Math.PI*2;ctx.strokeStyle='#cc2200';ctx.lineWidth=1.5;ctx.beginPath();ctx.moveTo(z.x+Math.cos(sa)*(z.sz+3),z.y+Math.sin(sa)*(z.sz+3));ctx.lineTo(z.x+Math.cos(sa)*(z.sz+10),z.y+Math.sin(sa)*(z.sz+10));ctx.stroke();}
+      ctx.fillStyle='#ff2200';ctx.font='bold 8px Courier New';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText('BOSS',z.x,z.y);}
+    // Zombie eyes
+    if(!z.flash||z.flash<=0){
+      const ea=Math.atan2(player.y-z.y,player.x-z.x),eo=z.sz*.36;
+      ctx.fillStyle='#fff';
+      ctx.beginPath();ctx.arc(z.x+Math.cos(ea+.42)*eo,z.y+Math.sin(ea+.42)*eo,z.sz*.2,0,Math.PI*2);ctx.fill();
+      ctx.beginPath();ctx.arc(z.x+Math.cos(ea-.42)*eo,z.y+Math.sin(ea-.42)*eo,z.sz*.2,0,Math.PI*2);ctx.fill();
+      ctx.fillStyle='#ff0000';
+      ctx.beginPath();ctx.arc(z.x+Math.cos(ea+.42)*eo,z.y+Math.sin(ea+.42)*eo,z.sz*.09,0,Math.PI*2);ctx.fill();
+      ctx.beginPath();ctx.arc(z.x+Math.cos(ea-.42)*eo,z.y+Math.sin(ea-.42)*eo,z.sz*.09,0,Math.PI*2);ctx.fill();
+    }
+    // Health bar (glowing)
+    const bw=z.sz*2.6,bx=z.x-bw/2,by=z.y-z.sz-11,pct=Math.max(0,z.hp/z.maxHp);
+    const hbCol=pct>.5?'#22cc44':pct>.25?'#aaaa22':'#cc2200';
+    ctx.fillStyle='#111';ctx.fillRect(bx,by,bw,4);
+    ctx.save();ctx.shadowColor=hbCol;ctx.shadowBlur=4;
+    ctx.fillStyle=hbCol;ctx.fillRect(bx,by,bw*pct,4);
+    ctx.restore();
+  });
+
+  // Bullets + trails
+  bullets.forEach(b=>{
+    if(b.trail&&b.trail.length>1){
+      for(let i=1;i<b.trail.length;i++){
+        ctx.strokeStyle=`rgba(255,220,60,${(i/b.trail.length)*.35})`;ctx.lineWidth=2.5*(i/b.trail.length);
+        ctx.beginPath();ctx.moveTo(b.trail[i-1].x,b.trail[i-1].y);ctx.lineTo(b.trail[i].x,b.trail[i].y);ctx.stroke();
+      }
+    }
+    ctx.save();ctx.shadowColor='#ffdd44';ctx.shadowBlur=10;
+    ctx.fillStyle='#ffee88';ctx.beginPath();ctx.arc(b.x,b.y,4,0,Math.PI*2);ctx.fill();
+    ctx.shadowBlur=0;ctx.restore();
+  });
+
+  // Player
+  const pch=CHARACTERS[charIdx];
+  ctx.save();ctx.translate(player.x,player.y);
+  if(player.invincible>0&&Math.floor(player.invincible*14)%2===0)ctx.globalAlpha=.3;
+  ctx.rotate(player.facing);
+  ctx.shadowColor=pch.body;ctx.shadowBlur=16;
+  ctx.fillStyle=pch.body;ctx.beginPath();ctx.arc(0,0,12,0,Math.PI*2);ctx.fill();
+  ctx.shadowBlur=0;
+  ctx.strokeStyle=pch.stroke;ctx.lineWidth=2;ctx.beginPath();ctx.arc(0,0,12,0,Math.PI*2);ctx.stroke();
+  // Helmet visor
+  ctx.fillStyle='rgba(0,0,0,0.45)';ctx.beginPath();ctx.ellipse(3,0,7,4.5,0,0,Math.PI*2);ctx.fill();
+  ctx.strokeStyle=pch.body+'aa';ctx.lineWidth=1;ctx.stroke();
+  // Gun
+  ctx.fillStyle=pch.gun;ctx.fillRect(9,-4,18,7);
+  ctx.fillStyle='#aaaaaa';ctx.fillRect(22,-3,6,5);
+  ctx.fillStyle=pch.accent;ctx.fillRect(9,-4,7,4);
+  // Muzzle flash when firing
+  if(player.fireRate>player.fireCool-0.04){ctx.save();ctx.shadowColor='#ffdd44';ctx.shadowBlur=14;ctx.fillStyle='#ffee88';ctx.beginPath();ctx.arc(28,0,4,0,Math.PI*2);ctx.fill();ctx.restore();}
+  ctx.globalAlpha=1;ctx.restore();
+
+  // Crosshair
+  const cx=mouse.x,cy=mouse.y;
+  ctx.strokeStyle='rgba(255,255,255,.6)';ctx.lineWidth=1;
+  ctx.beginPath();ctx.moveTo(cx-11,cy);ctx.lineTo(cx-5,cy);ctx.moveTo(cx+5,cy);ctx.lineTo(cx+11,cy);ctx.moveTo(cx,cy-11);ctx.lineTo(cx,cy-5);ctx.moveTo(cx,cy+5);ctx.lineTo(cx,cy+11);ctx.stroke();
+  ctx.strokeStyle='rgba(255,255,255,.25)';ctx.beginPath();ctx.arc(cx,cy,5,0,Math.PI*2);ctx.stroke();
+
+  // Vignette
+  const v=ctx.createRadialGradient(GW/2,GH/2,GH*.22,GW/2,GH/2,GH*.88);
+  v.addColorStop(0,'transparent');v.addColorStop(1,'rgba(0,0,0,.55)');
+  ctx.fillStyle=v;ctx.fillRect(-20,-20,GW+40,GH+40);
+  ctx.restore();
+}
+
+// -- INPUT --
+const NOINTERCEPT = new Set(['F1','F2','F3','F4','F5','F6','F7','F8','F9','F10','F11','F12','Tab']);
+
+window.addEventListener('keydown', e => {
+  if (e.target.closest && e.target.closest('#dev-panel')) return;
+  if (NOINTERCEPT.has(e.key)) return;
+
+  keys[e.key] = true;
+
+  if (e.key === 'Escape') {
+    e.preventDefault();
+    if(gameState==='playing'){gameState='paused';document.getElementById('pause-overlay').classList.add('active');}
+    else if(gameState==='paused') resumeGame();
+    return;
+  }
+  if (gameState==='playing' && ['w','a','s','d','W','A','S','D','ArrowLeft','ArrowRight','ArrowUp','ArrowDown',' '].includes(e.key)) e.preventDefault();
+}, true);
+
+window.addEventListener('keyup', e => {
+  if (e.target.closest && e.target.closest('#dev-panel')) return;
+  keys[e.key] = false;
+}, true);
+
+window.addEventListener('mousemove', e=>{mouse.x=e.clientX;mouse.y=e.clientY;});
+window.addEventListener('mousedown', e=>{if(e.button===0)mouse.down=true;});
+window.addEventListener('mouseup',   e=>{if(e.button===0)mouse.down=false;});
+gc.addEventListener('touchstart',e=>{e.preventDefault();const t=e.touches[0];mouse.x=t.clientX;mouse.y=t.clientY;mouse.down=true;},{passive:false});
+gc.addEventListener('touchmove', e=>{e.preventDefault();const t=e.touches[0];mouse.x=t.clientX;mouse.y=t.clientY;},{passive:false});
+gc.addEventListener('touchend', ()=>mouse.down=false);
+</script>
+</body>
+</html>
